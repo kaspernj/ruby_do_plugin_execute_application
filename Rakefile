@@ -17,8 +17,8 @@ Jeweler::Tasks.new do |gem|
   gem.name = "ruby_do_plugin_execute_application"
   gem.homepage = "http://github.com/kaspernj/ruby_do_plugin_execute_application"
   gem.license = "MIT"
-  gem.summary = %Q{TODO: one-line summary of your gem}
-  gem.description = %Q{TODO: longer description of your gem}
+  gem.summary = %Q{A plugin for Ruby-Do that executes installed applications.}
+  gem.description = %Q{A plugin for Ruby-Do that executes installed applications.}
   gem.email = "k@spernj.org"
   gem.authors = ["Kasper Johansen"]
   # dependencies defined in Gemfile
