@@ -55,6 +55,7 @@ PLATFORMS
 DEPENDENCIES
   bundler (>= 1.0.0)
   jeweler (~> 1.8.4)
+  knjrbfw
   rdoc (~> 3.12)
   rspec (~> 2.8.0)
   ruby_do
