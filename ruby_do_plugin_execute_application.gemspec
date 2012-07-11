@@ -5,11 +5,11 @@
 
 Gem::Specification.new do |s|
   s.name = %q{ruby_do_plugin_execute_application}
-  s.version = "0.0.0"
+  s.version = "0.0.1"
 
   s.required_rubygems_version = Gem::Requirement.new(">= 0") if s.respond_to? :required_rubygems_version=
   s.authors = ["Kasper Johansen"]
-  s.date = %q{2012-07-09}
+  s.date = %q{2012-07-11}
   s.description = %q{A plugin for Ruby-Do that executes installed applications.}
   s.email = %q{k@spernj.org}
   s.extra_rdoc_files = [
@@ -26,6 +26,7 @@ Gem::Specification.new do |s|
     "Rakefile",
     "VERSION",
     "lib/ruby_do_plugin_execute_application.rb",
+    "ruby_do_plugin_execute_application.gemspec",
     "spec/ruby_do_plugin_execute_application_spec.rb",
     "spec/spec_helper.rb"
   ]
