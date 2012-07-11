@@ -1,6 +1,38 @@
 class Ruby_do_plugin_execute_application < Ruby_do::Plugin::Base
-  def initialize(*args, &block)
-    super(*args, &block)
+  def start
+    #Scan XDG-dirs for .desktop application files.
+    dirs_scanned = []
+    @results_found = []
+    @debug = false
+    
+    #Do this in thread to avoid locking app.
+    Thread.new do
+      begin
+        ENV["XDG_DATA_DIRS"].split(":").each do |val|
+          val = val.to_s.gsub("//", "/").gsub(/\/$/, "")
+          
+          next if dirs_scanned.index(val) != nil
+          dirs_scanned << val
+          
+          path = "#{val}/applications"
+          self.scan_dir(path) if File.exists?(path)
+        end
+        
+        #Delete static results which were not found after scanning.
+        self.rdo_plugin_args[:rdo].ob.list(:Static_result, "plugin_id" => self.model.id, "id_not" => @results_found) do |sres|
+          print "Deleting result because it not longer exists: '#{sres[:id_str]}'.\n" if @debug
+          self.rdo_plugin_args[:rdo].ob.delete(sres)
+        end
+      rescue => e
+        $stderr.puts "Error when updating 'execute_application'-plugin."
+        $stderr.puts e.inspect
+        $stderr.puts e.backtrace
+      end
+    end
+  end
+  
+  def load_icons
+    print "Loading icons.\n" if @debug
     
     #Find icon-paths to scan for icons.
     @icon_paths = []
@@ -9,14 +41,6 @@ class Ruby_do_plugin_execute_application < Ruby_do::Plugin::Base
     self.scan_icon_dir("/usr/share/icons")
     
     @icon_exts = ["png", "xpm", "svg"]
-    
-    
-    #Scan XDG-dirs for .desktop application files.
-    @apps = []
-    ENV["XDG_DATA_DIRS"].split(":").each do |val|
-      path = "#{val}/applications"
-      self.scan_dir(path) if File.exists?(path)
-    end
   end
   
   def scan_icon_dir(path)
@@ -53,13 +77,21 @@ class Ruby_do_plugin_execute_application < Ruby_do::Plugin::Base
   end
   
   def scan_dir(path)
+    print "Path: #{path}\n" if @debug
+    
     Dir.foreach(path) do |file|
       next if file[0, 1] == "."
-      fp = "#{path}/#{file}"
+      fp = "#{path}/#{file}".gsub("//", "/")
       
       if File.directory?(fp)
         self.scan_dir(fp)
       else
+        if sres = self.static_result_get(fp) and fp.to_s.downcase.index("poedit") == nil
+          @results_found << sres.id
+          print "Skipping because exists: #{fp}\n" if @debug
+          next
+        end
+        
         cont = File.read(fp)
         
         data = {}
@@ -67,19 +99,28 @@ class Ruby_do_plugin_execute_application < Ruby_do::Plugin::Base
           data[match[0].to_s.downcase] = match[1]
         end
         
+        if !data["name"] or !data["exec"]
+          print "Skipping because no name or no exec: #{fp}\n" if @debug
+          next
+        end
+        
         icon_paths = []
         icon_path = nil
         
-        if icon = data["icon"]
-          if File.exists?(icon)
-            icon_path = icon
-          else
+        [data["icon"], data["name"]].each do |icon|
+          next if icon.to_s.strip.empty?
+          
+          if icon
+            icon_paths << icon if File.exists?(icon)
+            
+            self.load_icons if !@icon_paths
             @icon_paths.each do |path|
+              icon_fp = "#{path}/#{icon}"
+              icon_paths << icon_fp if File.exists?(icon_fp)
+              
               @icon_exts.each do |ext|
-                fp = "#{path}/#{icon}.#{ext}"
-                if File.exists?(fp)
-                  icon_paths << fp
-                end
+                icon_fp = "#{path}/#{icon}.#{ext}"
+                icon_paths << icon_fp if File.exists?(icon_fp)
               end
             end
           end
@@ -90,15 +131,19 @@ class Ruby_do_plugin_execute_application < Ruby_do::Plugin::Base
           icon_path = icon_paths.first
         end
         
-        if data["name"] and data["exec"]
-          @apps << {
-            :name => data["name"],
-            :namel => data["name"].to_s.downcase,
-            :exec => data["exec"],
-            :icon => icon,
-            :icon_path => icon_path
+        print "Registering: #{fp}\n" if @debug
+        exec_data = data["exec"].gsub("%U", "").gsub("%F", "").strip
+        res = self.register_static_result(
+          :id_str => fp,
+          :title => data["name"],
+          :descr => sprintf(_("Open the application: '%1$s' with the command '%2$s'."), data["name"], exec_data),
+          :icon_path => icon_path,
+          :data => {
+            :exec => exec_data
           }
-        end
+        )
+        
+        @results_found << res[:sres].id
       end
     end
   end
@@ -109,33 +154,8 @@ class Ruby_do_plugin_execute_application < Ruby_do::Plugin::Base
     }
   end
   
-  def on_search(args)
-    return Enumerator.new do |yielder|
-      @apps.each do |app|
-        found_all = true
-        args[:words].each do |word|
-          if app[:namel].index(word) == nil
-            found_all = false
-            break
-          end
-        end
-        
-        if found_all
-          yielder << Ruby_do::Plugin::Result.new(
-            :plugin => self,
-            :title => app[:name],
-            :title_html => "<b>#{Knj::Web.html(app[:name])}</b>",
-            :descr => sprintf(_("Open the application: '%1$s' with the command '%2$s'."), app[:name], app[:exec]),
-            :exec => app[:exec],
-            :icon => app[:icon_path]
-          )
-        end
-      end
-    end
-  end
-  
-  def execute_result(args)
-    Knj::Os.subproc(args[:res].args[:exec])
+  def execute_static_result(args)
+    Knj::Os.subproc(args[:sres].data[:exec])
     return :close_win_main
   end
 end
